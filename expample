@@ -1,0 +1,10 @@
+MYVAR = myvar
+MYFLAGS = myflags
+
+my_target: my_dep %
+	$MYVAR $MYFLAGS;
+%
+
+my_dep: %
+	$MYVAR -doaction;
+%
