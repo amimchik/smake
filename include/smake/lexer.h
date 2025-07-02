@@ -16,8 +16,8 @@ struct lexer_state {
 
 enum token_type {
 	TT_WORD,
+	TT_STR_LIT,
 	TT_DOLLAR,
-	TT_MODULO,
 	TT_COLON,
 	TT_UNKNOWN,
 	TT_EOF,
@@ -27,6 +27,7 @@ struct token {
 	int type;
 	union {
 		char *word;
+		char *str_lit;
 	};
 	int line;
 	int column;
