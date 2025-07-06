@@ -9,222 +9,174 @@
 #endif /*DEBUG_PARSER*/
 
 
-
-struct dict make_dict(int initial_cap)
+static int match(const struct token **tokens, int type)
 {
-	struct dict dict;
-	dict.cap = 0;
-	dict.len = 0;
-	if (initial_cap <= 0) {
-		dict.nodes = NULL;
-		return dict;
-	}
-	dict.nodes = malloc(sizeof(struct node) * initial_cap);
-	if (!dict.nodes) {
-		return dict;
-	} else {
-		dict.cap = initial_cap;
-	}
-	return dict;
+	if (!tokens)
+		return 0;
+
+	if (!*tokens)
+		return 0;
+
+	return (**tokens).type == type;
 }
 
-char *dict_get(struct dict *dict, const char *key)
+struct node parse_var(const struct token **tokens)
 {
-	if (!dict)
-		return NULL;
-
-	for (int i = 0; i < dict->len; i++) {
-		if (!strcmp(key, dict->nodes[i].key)) {
-			char *ret = malloc(strlen(dict->nodes[i].value));
-			if (!ret)
-				return NULL;
-			strcpy(ret, dict->nodes[i].value);
-			return ret;
-		}
-	}
+	printf("parsevar\n");
+	struct node node;
+	node.type = NT_VAR_DECL;
+	*tokens = (*tokens)->next;
+	printf("%d\n", (*tokens)->type);
 	
-	return NULL;
-}
-
-int dict_set(struct dict *dict, const char *key, const char *value)
-{
-	if (!dict)
-		return 1;
-
-	for (int i = 0; i < dict->len; i++) {
-		if (!strcmp(key, dict->nodes[i].key)) {
-			free(dict->nodes[i].value);
-			dict->nodes[i].value = malloc(strlen(value));
-			if (!dict->nodes[i].value)
-				return 1;
-			strcpy(dict->nodes[i].value, value);
-			return 0;
-		}
+	if (!match(tokens, TT_WORD)) {
+		fprintf(stderr, "unexpected token\n");
+		return node;
 	}
 
-#ifdef DEBUG_PARSER
-	printf("DICT\nCAP=%d;\nLEN=%d;\nPTR=%p\n", dict->cap, dict->len, dict->nodes);
-#endif /*DEBUG_PARSER*/
-	if (dict->len >= dict->cap) {
-#ifdef DEBUG_PARSER
-		printf("DICT\nCAP=%d;\nLEN=%d;\nPTR=%p\n", dict->cap, dict->len, dict->nodes);
-		printf("EXPECTED_REALLOC=%d;\n", dict->cap > 0 ? (dict->cap * 2) : 1);
-#endif /*DEBUG_PARSER*/
-		struct dict_node *tmp = realloc(dict->nodes, sizeof(struct dict_node) * (dict->cap > 0 ? (dict->cap * 2) : 1));
-#ifdef DEBUG_PARSER
-		printf("DICT\nCAP=%d;\nLEN=%d;\nPTR=%p\n", dict->cap, dict->len, dict->nodes);
-#endif /*DEBUG_PARSER*/
-		if (!tmp)
-			return 1;
+	char *name = malloc(strlen((**tokens).word));
 
-		dict->nodes = tmp;
-
-		if (dict->cap != 0)
-			dict->cap *= 2;
-		else
-			dict->cap = 1;
+	if (!name) {
+		fprintf(stderr, "alloc err");
+		return node;
 	}
 
-	dict->nodes[dict->len].key = malloc(strlen(key));
-	if (!dict->nodes[dict->len].key)
-		return 1;
+	strcpy(name, (**tokens).word);
 
-	strcpy(dict->nodes[dict->len].key, key);
-
-	dict->nodes[dict->len].value = malloc(strlen(value));
-	if (!dict->nodes[dict->len].value)
-		return 1;
-
-	strcpy(dict->nodes[dict->len].value, value);
-
-	dict->len++;
-	return 0;
-}
-
-static int expand_str_cap(char **str, int target_cap)
-{
-	if (!str)
-		return 1;
-	if (!*str)
-		return 1;
-
-	char *tmp = realloc(*str, target_cap);
-
-	if (!tmp)
-		return 1;
-
-	*str = tmp;
-
-	return 0;
-}
-
-static int expand_buf(struct dict *dict, char **expanded, int *cap, int *len, char *buf, int *buf_len)
-{
-#ifdef DEBUG_PARSER
-	printf("GETTING:'%s'%ld\n", buf, strlen(buf));
-#endif /*DEBUG_PARSER*/
-	char *val = dict_get(dict, buf);
-	if (!val)
-		return 1;
-	int val_len = strlen(val);
-	for (int i = 0; i < val_len; i++) {
-		if ((*len) + 1 >= (*cap)) {
-			if (expand_str_cap(expanded, (*cap) * 2))
-				return 1;
-			(*cap) *= 2;
-		}
-		(*expanded)[(*len)++] = val[i];
+	*tokens = (*tokens)->next;
+	
+	if (!match(tokens, TT_COLON)) {
+		fprintf(stderr, "unexpected token\n");
+		return node;
 	}
-	*buf_len = 0;
-	return 0;
+
+	*tokens = (*tokens)->next;
+
+	if (!match(tokens, TT_STR_LIT)) {
+		fprintf(stderr, "unexpected token\n");
+		return node;
+	}
+
+	char *value = malloc(strlen((*tokens)->str_lit));
+
+	if (!value) {
+		fprintf(stderr, "alloc err\n");
+		return node;
+	}
+
+	strcpy(value, (*tokens)->str_lit);
+
+	*tokens = (*tokens)->next;
+
+	node.var_decl.name = name;
+	node.var_decl.value = value;
+
+	return node;
 }
 
-char *expand(struct dict *dict, const char *str)
+struct node parse_target(const struct token **tokens)
 {
-	int cap = 10;
-	int len = 0;
+	printf("target\n");
+	struct node node;
+	node.type = NT_TARGET_DECL;
+	node.target_decl.name = NULL;
+	node.target_decl.value = NULL;
+	node.target_decl.dependencies_v = NULL;
+	node.target_decl.dependencies_c = 0;
 
-	char *expanded = malloc(cap);
+	if (!tokens || !*tokens) {
+		return node;
+	}
 
-	if (!expanded)
-		return NULL;
-
-
-	int buf_cap = 10;
-	int buf_len = 0;
-
-	char *buf = malloc(buf_cap);
-
-	if (!buf)
-		return NULL;
-
-	int covered = 0;
-	int prevdollar = 0;
-
-	while (*str) {
-#ifdef DEBUG_PARSER
-		printf("BUFF:%s\n", buf);
-		printf("OUTPUT:%s\n", expanded);
-#endif /*DEBUG_PARSER*/
-		char c = *str;
-		if (*str == '$' && !covered) {
-			prevdollar = 1;
-			covered = 1;
-			str++;
-		} else if (c == '$' && prevdollar) {
-			covered = 0;
-			prevdollar = 0;
-			if (len + 1 >= cap) {
-				if (!expand_str_cap(&expanded, cap  * 2))
-					goto err;
-				cap *= 2;
+	if (!match(tokens, TT_WORD)) {
+		fprintf(stderr, "unexpected token\n");
+		return node;
+	}
+	char *name = malloc(strlen((*tokens)->word));
+	if (!name) {
+		fprintf(stderr, "alloc err\n");
+		return node;
+	}
+	strcpy(name, (*tokens)->word);
+	*tokens = (**tokens).next;
+	if (!match(tokens, TT_COLON)) {
+		fprintf(stderr, "unexpected token\n");
+		return node;
+	}
+	*tokens = (**tokens).next;
+	int deps_cap = 5;
+	int deps_count = 0;
+	char **dependencies = malloc(sizeof(char *) * deps_cap);
+	if (!dependencies) {
+		fprintf(stderr, "alloc err\n");
+		return node;
+	}
+	while (match(tokens, TT_WORD)) {
+		if (deps_count >= deps_cap) {
+			char **tmp = realloc(dependencies, deps_cap * 2);
+			if (!tmp) {
+				for (int i = 0; i < deps_count; i++)
+					free(dependencies[i]);
+				free(dependencies);
+				fprintf(stderr, "realloc err\n");
+				return node;
 			}
-			expanded[len++] = '$';
-			str++;
-		} else if (c == '$' && covered && !prevdollar) {
-			prevdollar = 1;
-			if (buf_len)
-				if (expand_buf(dict, &expanded, &cap, &len, buf, &buf_len))
-					goto err;
-			str++;
-		} else if (covered && isalnum(c)) {
-			prevdollar = 0;
-			if (buf_len + 1 >= buf_cap) {
-				if (!expand_str_cap(&buf, buf_cap * 2))
-					goto err;
-				buf_cap *= 2;
-			}
-			buf[buf_len++] = c;
-			str++;
+			dependencies = tmp;
+		}
+		dependencies[deps_count] = malloc(strlen((*tokens)->word));
+		if (!dependencies[deps_count]) {
+			fprintf(stderr, "alloc err\n");
+			return node;
+		}
+		strcpy(dependencies[deps_count++], (*tokens)->word);
+		*tokens = (**tokens).next;
+	}
+	if (!match(tokens, TT_STR_LIT)) {
+		fprintf(stderr, "unexpected token\n");
+		return node;
+	}
+	char *value = malloc(strlen((*tokens)->str_lit));
+	if (!value) {
+		fprintf(stderr, "alloc err\n");
+		return node;
+	}
+	strcpy(value, (*tokens)->str_lit);
+	*tokens = (**tokens).next;
+	node.target_decl.name = name;
+	node.target_decl.dependencies_c = deps_count;
+	node.target_decl.dependencies_v = dependencies;
+	node.target_decl.value = value;
+	return node;
+}
+
+struct node parse_next(const struct token **tokens)
+{
+	if (match(tokens, TT_DOLLAR))
+		return parse_var(tokens);
+	else
+		return parse_target(tokens);
+}
+
+struct node *parse(const struct token *tokens)
+{
+	struct node *head = NULL;
+	struct node *current = NULL;
+	while (tokens && tokens->type != TT_EOF) {
+		printf("TYPE:%d\n", tokens->type);
+		struct node parsed = parse_next(&tokens);
+		if (!head) {
+			head = malloc(sizeof(struct node));
+			if (!head)
+				return NULL;
+			current = head;
+			*current = parsed;
 		} else {
-			covered = 0;
-			prevdollar = 0;
-#ifdef DEBUG_PARSER
-			printf("ELSEDONE\n");
-#endif /*DEBUG_PARSER*/
-			if (buf_len)
-				if (expand_buf(dict, &expanded, &cap, &len, buf, &buf_len))
-					goto err;
-			if (len + 1 >= cap) {
-				if (expand_str_cap(&expanded, cap  * 2))
-					goto err;
-				cap *= 2;
-			}
-			expanded[len++] = c;
-			str++;
+			current->next = malloc(sizeof(struct node));
+			if (!current->next)
+				return NULL;
+			*(current->next) = parsed;
+			current = current->next;
 		}
+		current->next = NULL;
 	}
-	if (buf_len)
-		if (expand_buf(dict, &expanded, &cap, &len, buf, &buf_len))
-			goto err;
-
-	return expanded;
-err:
-#ifdef DEBUG_PARSER
-	printf("EROR\n");
-#endif /*DEBUG_PARSER*/
-	free(expanded);
-	free(buf);
-	fprintf(stderr, "error while expanding string\n");
-	return NULL;
+	return head;
 }

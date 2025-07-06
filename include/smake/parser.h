@@ -1,31 +1,12 @@
 #ifndef _PARSER_H
 #define _PARSER_H
 
+#include <smake/lexer.h>
+
 #include <string.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <ctype.h>
-
-struct parser_state {};
-
-struct dict_node {
-	char *key;
-	char *value;
-};
-
-struct dict {
-	int cap;
-	int len;
-	struct dict_node *nodes;
-};
-
-struct dict make_dict(int initial_cap);
-
-int dict_set(struct dict *dict, const char *key, const char *value);
-char *dict_get(struct dict *dict, const char *key);
-
-
-char *expand(struct dict *vars, const char *str);
 
 
 enum node_type {
@@ -35,6 +16,8 @@ enum node_type {
 
 struct node {
 	int type;
+	int line;
+	int column;
 	union {
 		struct {
 			char *name;
@@ -47,8 +30,9 @@ struct node {
 			char *value;
 		} target_decl;
 	};
+	struct node *next;
 };
 
-
+struct node *parse(const struct token *tokens);
 
 #endif /*_PARSER_H*/

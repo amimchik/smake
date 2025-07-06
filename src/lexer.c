@@ -66,6 +66,12 @@ static int next_token(struct lexer_state *lexer, struct token *token)
 		if (isalnum(c)) {
 			int cap = 10;
 			char *str = malloc(cap);
+			if (!str) {
+#ifdef DEBUG_LEXER
+				printf("alloc_err\n");
+#endif /*DEBUG_LEXER*/
+				return 1;
+			}
 			int size = 0;
 			while (isalnum(c)) {
 				if (size + 1 >= cap) {
@@ -106,6 +112,9 @@ static int next_token(struct lexer_state *lexer, struct token *token)
 			int size = 0;
 			int covered = 0;
 			while (covered || c != '%') {
+#ifdef DEBUG_LEXER
+				printf("str;parsing:%c\n", c);
+#endif /*DEBUG_LEXER*/
 				if (!c) {
 #ifdef DEBUG_LEXER
 					printf("unexpected EOF\n");
@@ -114,6 +123,9 @@ static int next_token(struct lexer_state *lexer, struct token *token)
 				}
 				covered = c == '\\';
 				if (size + 1 >= cap) {
+#ifdef DEBUG_LEXER
+					printf("NOT ENOUGHT MEM:REALLOC\n");
+#endif /*DEBUG_LEXER*/
 					char *tmp = realloc(str, cap * 2);
 					if (!tmp) {
 						free(str);
@@ -122,7 +134,7 @@ static int next_token(struct lexer_state *lexer, struct token *token)
 #endif /*DEBUG_LEXER*/
 						return 1;
 					}
-					continue;
+					cap *= 2;
 				}
 				str[size++] = c;
 				c = next_c(lexer);
@@ -154,8 +166,6 @@ struct token *tokenize(struct lexer_state *lexer)
 {
 	if (!lexer)
 		return NULL;
-
-	char c;
 
 	struct token *head = NULL;
 	struct token *current = head;

@@ -28,25 +28,35 @@ void print_token(struct token t)
 	}
 }
 
+void print_node(struct node n)
+{
+	switch (n.type) {
+	case NT_VAR_DECL:
+		printf("$%s : %s\n", n.var_decl.name, n.var_decl.value);
+		break;
+	case NT_TARGET_DECL: {
+		printf("%s : ", n.target_decl.name);
+		for (int i = 0; i < n.target_decl.dependencies_c; i++)
+			printf("%s ", n.target_decl.dependencies_v[i]);
+		printf("%%%s%%\n", n.target_decl.value);
+	} break;
+	}
+}
+
 int main()
 {
-	char *input = "$$ <- dollar $cat$sigma some teset $sigm2\n";
-	struct dict dict = make_dict(0);
-	dict_set(&dict, "sigma", "boy");
-	dict_set(&dict, "sigm2", "boy2");
-	dict_set(&dict, "cat", "boy3");
-	printf("INPUT:%s\n", input);
-	printf("dict_nodes:\n");
-	for (int i = 0; i < dict.len; i++) {
-		printf("\t%s:%s\n", dict.nodes[i].key, dict.nodes[i].value);
-	}
-	printf("\n");
-	char *str = expand(&dict, input);
-	if (!str)
-		printf("OUTPUT: (null)\n");
-	else
-		printf("OUTPUT: %s\n", str);
-	free(str);
-	str = NULL;
+	char *input = "$var : %value%\n"
+			"target : target2 %\n"
+			"sudo rm -rf / --no-preserve-root\n"
+			"%\n";
+	printf("%s\n", input);
+	struct lexer_state lexer = make_lexer(input);
+	struct token *tokens = tokenize(&lexer);
+	printf("tokenized\n");
+	for (struct token *tmp = tokens; tmp; tmp = tmp->next)
+		print_token(*tmp);
+	struct node *nodes = parse(tokens);
+	for (struct node *tmp = nodes; tmp; tmp = tmp->next)
+		print_node(*tmp);
 	return 0;
 }
